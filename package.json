@@ -1,0 +1,23 @@
+{
+  "name": "pss-nesting-service",
+  "version": "1.0.0",
+  "description": "1D bin-packing nesting service for structural steel beams (Node.js/TypeScript)",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20",
+    "tsx": "^4.19.0",
+    "typescript": "^5"
+  }
+}

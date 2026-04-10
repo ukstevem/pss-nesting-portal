@@ -1,0 +1,15 @@
+services:
+  nesting-api:
+    build: .
+    container_name: pss-nesting-api
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - NESTING_OUTPUT_DIR=/app/outputs
+      - NESTING_RESULTS_DIR=/app/outputs/results
+      - NESTING_MAX_CONCURRENT_JOBS=${NESTING_MAX_CONCURRENT_JOBS:-2}
+      - DOCUMENT_SERVICE_URL=${DOCUMENT_SERVICE_URL:-http://host.docker.internal:3000}
+    volumes:
+      - ./outputs:/app/outputs
+    restart: unless-stopped
