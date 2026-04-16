@@ -42,10 +42,18 @@ class _NestingProgressCallback(cp_model.CpSolverSolutionCallback):
                 "items_placed": placed,
                 "elapsed_s": round(self.wall_time, 1),
             })
+        elif self._phase == 2:
+            bars = int(self.objective_value)
+            self._update({
+                "phase": 2,
+                "description": f"Minimising bars: {bars} bars used",
+                "bars_used": bars,
+                "elapsed_s": round(self.wall_time, 1),
+            })
         else:
             scrap = int(self.objective_value)
             self._update({
-                "phase": 2,
+                "phase": 3,
                 "description": f"Minimising waste: current best {scrap} mm scrap",
                 "current_scrap_mm": scrap,
                 "elapsed_s": round(self.wall_time, 1),
@@ -245,34 +253,55 @@ def _run_single_section(
     best_assigned = int(solver.objective_value)
     log.info("nesting_phase1 section=%s placed=%d total=%d status=%s", section, best_assigned, n, phase1_status)
 
-    # --- Phase 2: fix count, minimise bars+scrap or just scrap ---
     model.add(sum(assign) == best_assigned)
+
     if pack_tight:
-        # Lexicographic: minimise bar count first, then waste.
-        # Weight bins_used by (total stock length + 1) — the theoretical max
-        # total scrap — so one fewer bar always dominates any scrap change.
-        big_m = sum(b["length"] for b in bins) + 1
-        model.minimize(
-            sum(y[j] for j in range(num_bins)) * big_m + sum(scrap)
-        )
-    else:
+        # --- Phase 2: fix placement, minimise bar count ---
+        bins_used_expr = sum(y[j] for j in range(num_bins))
+        model.minimize(bins_used_expr)
+        cb2 = _NestingProgressCallback(phase=2, n_items=n, update_fn=update_progress_fn)
+        solver2 = _make_solver()
+        status2 = solver2.solve(model, cb2)
+        if status2 in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            min_bars = int(solver2.objective_value)
+            log.info("nesting_phase2_bars section=%s min_bars=%d status=%s",
+                      section, min_bars,
+                      "optimal" if status2 == cp_model.OPTIMAL else "feasible")
+        else:
+            # Shouldn't happen — Phase 1 was feasible, so Phase 2 must be too.
+            min_bars = num_bins
+
+        # --- Phase 3: fix bar count, minimise waste ---
+        model.add(bins_used_expr == min_bars)
         model.minimize(sum(scrap))
-    cb2 = _NestingProgressCallback(phase=2, n_items=n, update_fn=update_progress_fn)
-    solver2 = _make_solver()
-    status2 = solver2.solve(model, cb2)
-    phase2_status = "optimal" if status2 == cp_model.OPTIMAL else "feasible"
-    total_scrap = int(solver2.objective_value)
-    log.info("nesting_phase2 section=%s scrap_mm=%d status=%s", section, total_scrap, phase2_status)
+        cb3 = _NestingProgressCallback(phase=3, n_items=n, update_fn=update_progress_fn)
+        solver3 = _make_solver()
+        status3 = solver3.solve(model, cb3)
+        phase2_status = "optimal" if status3 == cp_model.OPTIMAL else "feasible"
+        total_scrap = int(solver3.objective_value)
+        final_solver = solver3
+        log.info("nesting_phase3_waste section=%s bars=%d scrap_mm=%d status=%s",
+                  section, min_bars, total_scrap, phase2_status)
+    else:
+        # --- Phase 2 (original): fix placement, minimise waste ---
+        model.minimize(sum(scrap))
+        cb2 = _NestingProgressCallback(phase=3, n_items=n, update_fn=update_progress_fn)
+        solver2 = _make_solver()
+        status2 = solver2.solve(model, cb2)
+        phase2_status = "optimal" if status2 == cp_model.OPTIMAL else "feasible"
+        total_scrap = int(solver2.objective_value)
+        final_solver = solver2
+        log.info("nesting_phase2 section=%s scrap_mm=%d status=%s", section, total_scrap, phase2_status)
 
     # --- Extract solution ---
     result_bins = []
     assigned_idx: set = set()
     item_bin_count = [0] * n  # track how many bins each item is in
     for j in range(num_bins):
-        if solver2.value(y[j]):
+        if final_solver.value(y[j]):
             bin_items = []
             for i in range(n):
-                if solver2.value(x[(i, j)]):
+                if final_solver.value(x[(i, j)]):
                     bin_items.append(items[i])
                     assigned_idx.add(items[i]["item_index"])
                     item_bin_count[i] += 1
