@@ -271,14 +271,25 @@ def _run_single_section(
             # Shouldn't happen — Phase 1 was feasible, so Phase 2 must be too.
             min_bars = num_bins
 
-        # --- Phase 3: fix bar count, minimise waste ---
+        # --- Phase 3: fix bar count, concentrate waste onto last bars ---
+        # With identical stock lengths, total waste is constant regardless
+        # of item distribution — minimise(sum(scrap)) does nothing.
+        # Instead, weight each bar's waste by reverse index so the solver
+        # packs lower-indexed bars tight (the symmetry-breaking constraint
+        # already ensures lower-indexed bins are used first).
         model.add(bins_used_expr == min_bars)
-        model.minimize(sum(scrap))
+        weighted_scrap = sum(
+            scrap[j] * (num_bins - j) for j in range(num_bins)
+        )
+        model.minimize(weighted_scrap)
         cb3 = _NestingProgressCallback(phase=3, n_items=n, update_fn=update_progress_fn)
         solver3 = _make_solver()
         status3 = solver3.solve(model, cb3)
         phase2_status = "optimal" if status3 == cp_model.OPTIMAL else "feasible"
-        total_scrap = int(solver3.objective_value)
+        # Compute actual total scrap (not the weighted value)
+        total_scrap = sum(
+            solver3.value(scrap[j]) for j in range(num_bins)
+        )
         final_solver = solver3
         log.info("nesting_phase3_waste section=%s bars=%d scrap_mm=%d status=%s",
                   section, min_bars, total_scrap, phase2_status)
