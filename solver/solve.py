@@ -30,6 +30,7 @@ def main() -> None:
         time_limit=request.get("time_limit", 300.0),
         num_search_workers=request.get("num_search_workers", 2),
         update_progress_fn=progress_callback,
+        pack_tight=request.get("pack_tight", True),
     )
 
     json.dump(result, sys.stdout)

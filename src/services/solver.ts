@@ -17,6 +17,7 @@ export interface SolverRequest {
   kerf: number;
   time_limit: number;
   num_search_workers: number;
+  pack_tight: boolean;
 }
 
 /**

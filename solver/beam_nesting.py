@@ -135,12 +135,15 @@ def _run_single_section(
     time_limit: float,
     num_search_workers: int,
     update_progress_fn: Callable[[Dict], None],
+    pack_tight: bool = True,
 ) -> Dict[str, Any]:
     """
     Run CP-SAT nesting for a single section profile.
 
     items: list of dicts with keys item_index, length (and optionally ref_id, parent, member_name)
     stock_inventory: list of {length, qty}
+    pack_tight: when True, Phase 2 minimises bar count first, then waste within that count.
+                When False, Phase 2 minimises total waste only (original behaviour).
     Returns a dict with result_bins, unassigned, phase1_status, phase2_status, summary.
     """
     max_stock = max(s["length"] for s in stock_inventory)
@@ -242,9 +245,18 @@ def _run_single_section(
     best_assigned = int(solver.objective_value)
     log.info("nesting_phase1 section=%s placed=%d total=%d status=%s", section, best_assigned, n, phase1_status)
 
-    # --- Phase 2: fix count, minimise scrap ---
+    # --- Phase 2: fix count, minimise bars+scrap or just scrap ---
     model.add(sum(assign) == best_assigned)
-    model.minimize(sum(scrap))
+    if pack_tight:
+        # Lexicographic: minimise bar count first, then waste.
+        # Weight bins_used by (max_stock_length + 1) so one fewer bar always
+        # beats any scrap improvement within the same bar count.
+        big_m = max(b["length"] for b in bins) + 1
+        model.minimize(
+            sum(y[j] for j in range(num_bins)) * big_m + sum(scrap)
+        )
+    else:
+        model.minimize(sum(scrap))
     cb2 = _NestingProgressCallback(phase=2, n_items=n, update_fn=update_progress_fn)
     solver2 = _make_solver()
     status2 = solver2.solve(model, cb2)
@@ -323,6 +335,7 @@ def run_nesting(
     time_limit: float,
     num_search_workers: int,
     update_progress_fn: Callable[[Dict], None],
+    pack_tight: bool = True,
 ) -> Dict[str, Any]:
     """
     Group items by section and run CP-SAT nesting for each group.
@@ -330,6 +343,7 @@ def run_nesting(
     items: list of dicts (NestingItem serialised)
     stock_per_section: list of {section, stock: [{length, qty}]}
     default_stock: fallback stock when section not found in stock_per_section
+    pack_tight: minimise bar count first, then waste (default True)
     """
     # Build stock lookup
     stock_map: Dict[str, List[Dict]] = {s["section"]: s["stock"] for s in stock_per_section}
@@ -378,6 +392,7 @@ def run_nesting(
             time_limit=time_limit,
             num_search_workers=num_search_workers,
             update_progress_fn=_section_progress,
+            pack_tight=pack_tight,
         )
 
     totals = {

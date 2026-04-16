@@ -68,6 +68,7 @@ nestingRouter.post("/run", async (req: Request, res: Response) => {
 
   const kerf = body.kerf ?? 3;
   const timeLimit = body.time_limit ?? 300.0;
+  const packTight = body.pack_tight !== false; // default true
   const sectionsQueued = [...new Set(body.items.map((it) => it.section))];
 
   const taskId = taskManager.submit(async (_taskId, updateProgress) => {
@@ -80,6 +81,7 @@ nestingRouter.post("/run", async (req: Request, res: Response) => {
         kerf,
         time_limit: timeLimit,
         num_search_workers: config.workersPerJob,
+        pack_tight: packTight,
       },
       updateProgress,
     );

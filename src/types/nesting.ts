@@ -28,6 +28,7 @@ export interface NestingRequest {
   default_stock?: StockEntry[] | null;
   kerf: number; // default 3
   time_limit: number; // default 300.0
+  pack_tight?: boolean; // default true — minimise bar count first, then waste
 }
 
 // ---------------------------------------------------------------------------
