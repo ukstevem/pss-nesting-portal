@@ -249,9 +249,9 @@ def _run_single_section(
     model.add(sum(assign) == best_assigned)
     if pack_tight:
         # Lexicographic: minimise bar count first, then waste.
-        # Weight bins_used by (max_stock_length + 1) so one fewer bar always
-        # beats any scrap improvement within the same bar count.
-        big_m = max(b["length"] for b in bins) + 1
+        # Weight bins_used by (total stock length + 1) — the theoretical max
+        # total scrap — so one fewer bar always dominates any scrap change.
+        big_m = sum(b["length"] for b in bins) + 1
         model.minimize(
             sum(y[j] for j in range(num_bins)) * big_m + sum(scrap)
         )
