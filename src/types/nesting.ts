@@ -19,6 +19,7 @@ export interface StockEntry {
 export interface SectionStock {
   section: string;
   stock: StockEntry[];
+  comments?: string | null; // free-text operator note, carried through to the result
 }
 
 export interface NestingRequest {
@@ -72,6 +73,7 @@ export interface SectionResult {
   phase1_status: PhaseStatus;
   phase2_status: PhaseStatus | null;
   summary: SectionSummary;
+  comments?: string | null; // operator note copied from the request's SectionStock
 }
 
 export interface NestingTotals {
@@ -113,6 +115,7 @@ export interface CuttingListBar {
 
 export interface CuttingListSection {
   designation: string;
+  comments?: string | null;
   items_placed: number;
   items_unassigned: number;
   phase1_status: PhaseStatus;

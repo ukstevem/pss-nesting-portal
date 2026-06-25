@@ -86,6 +86,15 @@ nestingRouter.post("/run", async (req: Request, res: Response) => {
       updateProgress,
     );
 
+    // Attach per-section operator comments from the request to each section
+    // result (covers every section the solver returns, incl. no_stock).
+    const commentsMap = new Map<string, string | null>(
+      (body.stock_per_section ?? []).map((s) => [s.section, s.comments ?? null]),
+    );
+    for (const [section, sec] of Object.entries(result.sections)) {
+      sec.comments = commentsMap.get(section) ?? null;
+    }
+
     // Persist to disk
     await fs.mkdir(config.RESULTS_DIR, { recursive: true });
     await fs.writeFile(resultPath(_taskId), JSON.stringify(result, null, 2));

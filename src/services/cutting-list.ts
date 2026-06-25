@@ -36,6 +36,7 @@ export function toCuttingList(result: NestingResult): CuttingList {
 
     sections.push({
       designation,
+      comments: sec.comments ?? null,
       items_placed: sec.summary.items_placed,
       items_unassigned: sec.summary.items_unassigned,
       phase1_status: sec.phase1_status,
@@ -140,6 +141,9 @@ export function cuttingListToCsv(cuttingList: CuttingList): string {
   for (const sec of cuttingList.sections) {
     out += csvRow([]);
     out += csvRow(["Section", sec.designation]);
+    if (sec.comments) {
+      out += csvRow(["Comments", sec.comments]);
+    }
     out += csvRow([
       "Bar",
       "Stock ID",
@@ -327,6 +331,14 @@ export async function cuttingListToXlsx(
           length: it.length,
         });
       }
+    }
+
+    // Surface the operator comment as a banner row above the table.
+    if (sec.comments) {
+      ws.insertRow(1, [`Comments: ${sec.comments}`]);
+      ws.mergeCells(1, 1, 1, 10);
+      const commentRow = ws.getRow(1);
+      commentRow.font = { italic: true, bold: true };
     }
   }
 
