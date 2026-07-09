@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "pss_nesting_service",
+  "project_id": "24273ee2-ca29-4557-9b59-35c7de6da65a"
+}
