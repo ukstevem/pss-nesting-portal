@@ -76,7 +76,6 @@ pnpm build && pnpm start
 | `NESTING_MAX_CONCURRENT_JOBS` | `2` | Max simultaneous CP-SAT solves |
 | `NESTING_PYTHON_BIN` | `python3` | Python binary for solver subprocess |
 | `NESTING_SOLVER_SCRIPT` | `solver/solve.py` | Path to solver CLI bridge |
-| `DOCUMENT_SERVICE_URL` | `http://localhost:3000` | pss-document-service URL for PDF generation |
 
 `workersPerJob` is auto-calculated as `os.cpus().length / MAX_CONCURRENT_JOBS`.
 
@@ -94,7 +93,6 @@ All nesting endpoints are under `/api/v1/nesting/`.
 | GET | `/api/v1/nesting/cutting-list/{task_id}` | Formatted cutting list (JSON) |
 | GET | `/api/v1/nesting/cutting-list/{task_id}/csv` | Download cutting list as CSV |
 | GET | `/api/v1/nesting/cutting-list/{task_id}/xlsx` | Download cutting list as XLSX |
-| GET | `/api/v1/nesting/cutting-list/{task_id}/pdf` | Download cutting list as PDF (via document service) |
 | GET | `/api/v1/nesting/layout/{task_id}` | Graphical layout data (consumed by frontend UI) |
 
 ### Request format (POST /run)
@@ -125,7 +123,6 @@ All nesting endpoints are under `/api/v1/nesting/`.
 ### New endpoints (beyond original Python service)
 
 - **GET /cutting-list/{task_id}/xlsx** — XLSX export with summary sheet + one sheet per section.
-- **GET /cutting-list/{task_id}/pdf** — Delegates to pss-document-service for branded PDF.
 - **GET /layout/{task_id}** — Graphical layout data with `offset_mm` per cut and `kerf_positions_mm` for frontend bar visualisation.
 
 ## Architecture: Node.js ↔ Python solver bridge
@@ -172,7 +169,7 @@ Completed results are saved to `{RESULTS_DIR}/{task_id}.json`. All read endpoint
 
 ## PDF generation
 
-PDF is delegated to pss-document-service (default `http://localhost:3000`). The nesting service POSTs the cutting list JSON to `POST /api/nesting/pdf` and streams back the PDF response. The document service endpoint must be implemented separately.
+This service does **not** generate or proxy PDFs. The portal (`platform-portal/apps/nesting`) fetches the cutting-list JSON from here (`/cutting-list/{task_id}`) and POSTs it directly to pss-document-service, which renders the branded PDF from its own template. A stock-bar consumption summary migration to the doc-service HTML filing model (numbered + tracked documents) is tracked in epic `platform-portal-6gr`.
 
 ## Docker setup
 

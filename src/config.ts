@@ -21,9 +21,6 @@ export const config = {
   /** Max concurrent CP-SAT solves running simultaneously. */
   MAX_CONCURRENT_JOBS: envInt("NESTING_MAX_CONCURRENT_JOBS", 2),
 
-  /** URL of pss-document-service for PDF generation. */
-  DOCUMENT_SERVICE_URL: env("DOCUMENT_SERVICE_URL", "http://localhost:3000"),
-
   /** Path to the Python solver script. */
   SOLVER_SCRIPT: env("NESTING_SOLVER_SCRIPT", "solver/solve.py"),
 
