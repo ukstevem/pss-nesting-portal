@@ -113,6 +113,18 @@ export interface CuttingListBar {
   cuts: CuttingListCut[];
 }
 
+// Roll-up of stock bars consumed, grouped by length (e.g. "120 bars: 72@14000,
+// 48@12000"). Computed per section and overall from the placed bars.
+export interface StockConsumptionGroup {
+  length_mm: number;
+  qty: number;
+}
+
+export interface StockConsumption {
+  total_bars: number;
+  groups: StockConsumptionGroup[]; // grouped by stock length, longest first
+}
+
 export interface CuttingListSection {
   designation: string;
   comments?: string | null;
@@ -121,6 +133,7 @@ export interface CuttingListSection {
   phase1_status: PhaseStatus;
   phase2_status: PhaseStatus | null;
   summary: SectionSummary;
+  stock_consumption: StockConsumption;
   bars: CuttingListBar[];
   unassigned: BinItem[];
 }
@@ -129,6 +142,7 @@ export interface CuttingList {
   job_label: string | null;
   run_at: string;
   totals: NestingTotals;
+  stock_consumption: StockConsumption; // overall, across all sections
   sections: CuttingListSection[];
 }
 

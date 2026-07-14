@@ -4,6 +4,7 @@ import type {
   CuttingList,
   CuttingListSection,
   CuttingListBar,
+  StockConsumption,
   LayoutData,
   LayoutSection,
   LayoutBar,
@@ -12,11 +13,31 @@ import type {
 } from "../types/nesting.js";
 
 // ---------------------------------------------------------------------------
+// Stock-bar consumption roll-up (grouped by length, longest first)
+// ---------------------------------------------------------------------------
+
+function toStockConsumption(counts: Map<number, number>): StockConsumption {
+  const groups = [...counts.entries()]
+    .map(([length_mm, qty]) => ({ length_mm, qty }))
+    .sort((a, b) => b.length_mm - a.length_mm);
+  const total_bars = groups.reduce((sum, g) => sum + g.qty, 0);
+  return { total_bars, groups };
+}
+
+/** Human-readable summary, e.g. "120 bars: 72@14000, 48@12000". */
+export function formatStockConsumption(sc: StockConsumption): string {
+  if (sc.total_bars === 0) return "0 bars";
+  const parts = sc.groups.map((g) => `${g.qty}@${g.length_mm}`).join(", ");
+  return `${sc.total_bars} bars: ${parts}`;
+}
+
+// ---------------------------------------------------------------------------
 // JSON cutting list (matches Python _to_cutting_list exactly)
 // ---------------------------------------------------------------------------
 
 export function toCuttingList(result: NestingResult): CuttingList {
   const sections: CuttingListSection[] = [];
+  const overallCounts = new Map<number, number>();
 
   for (const [designation, sec] of Object.entries(result.sections)) {
     const bars: CuttingListBar[] = (sec.result_bins ?? []).map((bin, idx) => ({
@@ -34,6 +55,18 @@ export function toCuttingList(result: NestingResult): CuttingList {
       })),
     }));
 
+    const sectionCounts = new Map<number, number>();
+    for (const bar of bars) {
+      sectionCounts.set(
+        bar.stock_length_mm,
+        (sectionCounts.get(bar.stock_length_mm) ?? 0) + 1,
+      );
+      overallCounts.set(
+        bar.stock_length_mm,
+        (overallCounts.get(bar.stock_length_mm) ?? 0) + 1,
+      );
+    }
+
     sections.push({
       designation,
       comments: sec.comments ?? null,
@@ -42,6 +75,7 @@ export function toCuttingList(result: NestingResult): CuttingList {
       phase1_status: sec.phase1_status,
       phase2_status: sec.phase2_status,
       summary: sec.summary,
+      stock_consumption: toStockConsumption(sectionCounts),
       bars,
       unassigned: sec.unassigned ?? [],
     });
@@ -51,6 +85,7 @@ export function toCuttingList(result: NestingResult): CuttingList {
     job_label: result.job_label,
     run_at: result.run_at,
     totals: result.totals,
+    stock_consumption: toStockConsumption(overallCounts),
     sections,
   };
 }
@@ -138,12 +173,18 @@ function csvRow(fields: unknown[]): string {
 export function cuttingListToCsv(cuttingList: CuttingList): string {
   let out = "";
 
+  out += csvRow([
+    "OVERALL STOCK CONSUMED",
+    formatStockConsumption(cuttingList.stock_consumption),
+  ]);
+
   for (const sec of cuttingList.sections) {
     out += csvRow([]);
     out += csvRow(["Section", sec.designation]);
     if (sec.comments) {
       out += csvRow(["Comments", sec.comments]);
     }
+    out += csvRow(["Stock consumed", formatStockConsumption(sec.stock_consumption)]);
     out += csvRow([
       "Bar",
       "Stock ID",
@@ -239,7 +280,7 @@ export async function cuttingListToXlsx(
   const summary = workbook.addWorksheet("Summary");
   summary.columns = [
     { header: "Metric", key: "metric", width: 25 },
-    { header: "Value", key: "value", width: 15 },
+    { header: "Value", key: "value", width: 40 },
   ];
   summary.getRow(1).font = headerFont;
   summary.getRow(1).fill = headerFill;
@@ -268,6 +309,21 @@ export async function cuttingListToXlsx(
     metric: "Total Items Unassigned",
     value: cuttingList.totals.total_items_unassigned,
   });
+
+  // Stock-bar consumption roll-up (overall + per section)
+  summary.addRow({});
+  const scTitle = summary.addRow({ metric: "STOCK CONSUMED", value: "" });
+  scTitle.font = { bold: true };
+  summary.addRow({
+    metric: "Overall",
+    value: formatStockConsumption(cuttingList.stock_consumption),
+  });
+  for (const sec of cuttingList.sections) {
+    summary.addRow({
+      metric: sec.designation,
+      value: formatStockConsumption(sec.stock_consumption),
+    });
+  }
 
   // One sheet per section
   for (const sec of cuttingList.sections) {
@@ -340,6 +396,14 @@ export async function cuttingListToXlsx(
       const commentRow = ws.getRow(1);
       commentRow.font = { italic: true, bold: true };
     }
+
+    // Stock-bar consumption roll-up at the foot of the section sheet.
+    ws.addRow([]);
+    const scRow = ws.addRow([
+      `Stock consumed — ${formatStockConsumption(sec.stock_consumption)}`,
+    ]);
+    ws.mergeCells(scRow.number, 1, scRow.number, 10);
+    scRow.font = { bold: true };
   }
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
