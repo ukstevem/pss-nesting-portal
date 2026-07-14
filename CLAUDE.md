@@ -25,7 +25,7 @@ pss-nesting-service/
     types/
       nesting.ts          # TypeScript interfaces (matches Python Pydantic models)
   solver/
-    beam_nesting.py       # CP-SAT two-phase solver + greedy fallback (from original)
+    beam_nesting.py       # CP-SAT three-phase solver + greedy fallback (from original)
     solve.py              # CLI bridge: JSON stdin → progress stderr → JSON stdout
     requirements.txt      # Python deps (ortools)
   outputs/
@@ -149,11 +149,15 @@ This allows the solver to use all OR-Tools features (warm-start, callbacks, mult
 
 ## Solver algorithm (beam_nesting.py)
 
-Two-phase CP-SAT approach per section:
+Three-phase CP-SAT approach per section (when `pack_tight` is true — the default):
 
 **Phase 1 — Maximise placement**: maximise the number of items assigned to bins. Identifies items that genuinely cannot fit in any available stock.
 
-**Phase 2 — Minimise waste**: fix the assigned count from Phase 1, then minimise total scrap across all used bins.
+**Phase 2 — Minimise bar count**: fix the assigned count from Phase 1, then minimise the number of bars used.
+
+**Phase 3 — Concentrate waste**: fix the bar count from Phase 2, then minimise *weighted* scrap (`scrap[j] * (num_bins - j)`). With identical stock lengths total waste is constant regardless of distribution, so a plain `minimise(sum(scrap))` does nothing; weighting by reverse bin index packs the earlier bars tight and pushes the remainder onto the last bar (which symmetry breaking already fills last).
+
+When `pack_tight` is false, Phase 2 is the original single step instead: fix placement, then minimise total scrap across all used bins (no bar-count phase).
 
 Key details:
 - Stock is expanded into individual bins and sorted **shortest-first**.
