@@ -113,8 +113,8 @@ export interface CuttingListBar {
   cuts: CuttingListCut[];
 }
 
-// Roll-up of stock bars consumed, grouped by length (e.g. "120 bars: 72@14000,
-// 48@12000"). Computed per section and overall from the placed bars.
+// Roll-up of stock bars consumed by ONE section, grouped by length (e.g.
+// "24 bars: 12@12200, 12@6000"). Computed from that section's placed bars.
 export interface StockConsumptionGroup {
   length_mm: number;
   qty: number;
@@ -123,6 +123,20 @@ export interface StockConsumptionGroup {
 export interface StockConsumption {
   total_bars: number;
   groups: StockConsumptionGroup[]; // grouped by stock length, longest first
+}
+
+// Overall roll-up across all sections. Kept SECTION-MAJOR on purpose: distinct
+// profiles at the same stock length are physically different stock, so they
+// must never be merged into one line (24 angle + 24 channel @12200 is two
+// order lines, not "48@12200").
+export interface SectionStockConsumption {
+  designation: string;
+  consumption: StockConsumption;
+}
+
+export interface OverallStockConsumption {
+  total_bars: number;
+  by_section: SectionStockConsumption[]; // one per section that used stock
 }
 
 export interface CuttingListSection {
@@ -142,7 +156,7 @@ export interface CuttingList {
   job_label: string | null;
   run_at: string;
   totals: NestingTotals;
-  stock_consumption: StockConsumption; // overall, across all sections
+  stock_consumption: OverallStockConsumption; // overall, section-major
   sections: CuttingListSection[];
 }
 

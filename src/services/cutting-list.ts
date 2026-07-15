@@ -5,6 +5,8 @@ import type {
   CuttingListSection,
   CuttingListBar,
   StockConsumption,
+  StockConsumptionGroup,
+  OverallStockConsumption,
   LayoutData,
   LayoutSection,
   LayoutBar,
@@ -24,11 +26,15 @@ function toStockConsumption(counts: Map<number, number>): StockConsumption {
   return { total_bars, groups };
 }
 
-/** Human-readable summary, e.g. "120 bars: 72@14000, 48@12000". */
+/** "12@12200, 12@6000" — the length groups of one section, longest first. */
+export function formatConsumptionGroups(groups: StockConsumptionGroup[]): string {
+  return groups.map((g) => `${g.qty}@${g.length_mm}`).join(", ");
+}
+
+/** One section's summary, e.g. "24 bars: 12@12200, 12@6000". */
 export function formatStockConsumption(sc: StockConsumption): string {
   if (sc.total_bars === 0) return "0 bars";
-  const parts = sc.groups.map((g) => `${g.qty}@${g.length_mm}`).join(", ");
-  return `${sc.total_bars} bars: ${parts}`;
+  return `${sc.total_bars} bars: ${formatConsumptionGroups(sc.groups)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,7 +43,6 @@ export function formatStockConsumption(sc: StockConsumption): string {
 
 export function toCuttingList(result: NestingResult): CuttingList {
   const sections: CuttingListSection[] = [];
-  const overallCounts = new Map<number, number>();
 
   for (const [designation, sec] of Object.entries(result.sections)) {
     const bars: CuttingListBar[] = (sec.result_bins ?? []).map((bin, idx) => ({
@@ -61,10 +66,6 @@ export function toCuttingList(result: NestingResult): CuttingList {
         bar.stock_length_mm,
         (sectionCounts.get(bar.stock_length_mm) ?? 0) + 1,
       );
-      overallCounts.set(
-        bar.stock_length_mm,
-        (overallCounts.get(bar.stock_length_mm) ?? 0) + 1,
-      );
     }
 
     sections.push({
@@ -81,11 +82,23 @@ export function toCuttingList(result: NestingResult): CuttingList {
     });
   }
 
+  // Overall roll-up: section-major so distinct profiles at the same stock
+  // length are never conflated. Only sections that actually used stock appear.
+  const overall: OverallStockConsumption = {
+    total_bars: sections.reduce((sum, s) => sum + s.stock_consumption.total_bars, 0),
+    by_section: sections
+      .filter((s) => s.stock_consumption.total_bars > 0)
+      .map((s) => ({
+        designation: s.designation,
+        consumption: s.stock_consumption,
+      })),
+  };
+
   return {
     job_label: result.job_label,
     run_at: result.run_at,
     totals: result.totals,
-    stock_consumption: toStockConsumption(overallCounts),
+    stock_consumption: overall,
     sections,
   };
 }
@@ -175,8 +188,11 @@ export function cuttingListToCsv(cuttingList: CuttingList): string {
 
   out += csvRow([
     "OVERALL STOCK CONSUMED",
-    formatStockConsumption(cuttingList.stock_consumption),
+    `${cuttingList.stock_consumption.total_bars} bars total`,
   ]);
+  for (const s of cuttingList.stock_consumption.by_section) {
+    out += csvRow(["", s.designation, formatConsumptionGroups(s.consumption.groups)]);
+  }
 
   for (const sec of cuttingList.sections) {
     out += csvRow([]);
@@ -310,18 +326,18 @@ export async function cuttingListToXlsx(
     value: cuttingList.totals.total_items_unassigned,
   });
 
-  // Stock-bar consumption roll-up (overall + per section)
+  // Stock-bar consumption roll-up — section-major (one row per section that
+  // used stock, so distinct profiles at the same length stay separate).
   summary.addRow({});
-  const scTitle = summary.addRow({ metric: "STOCK CONSUMED", value: "" });
-  scTitle.font = { bold: true };
-  summary.addRow({
-    metric: "Overall",
-    value: formatStockConsumption(cuttingList.stock_consumption),
+  const scTitle = summary.addRow({
+    metric: "STOCK CONSUMED",
+    value: `${cuttingList.stock_consumption.total_bars} bars total`,
   });
-  for (const sec of cuttingList.sections) {
+  scTitle.font = { bold: true };
+  for (const s of cuttingList.stock_consumption.by_section) {
     summary.addRow({
-      metric: sec.designation,
-      value: formatStockConsumption(sec.stock_consumption),
+      metric: s.designation,
+      value: formatStockConsumption(s.consumption),
     });
   }
 
